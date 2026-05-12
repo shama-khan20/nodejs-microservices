@@ -1,0 +1,53 @@
+import express, { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import bodyParser from 'body-parser';
+
+const app = express();
+
+app.use(bodyParser.json());
+const port = 3001;
+
+mongoose.connect('mongodb://mongo:27017/tasks').then(() => { 
+    console.log("Connected to Mongodb")
+}).catch((err) => {
+    console.error("Error connecting to mongodb", err)
+})
+
+
+const TaskSchema = new mongoose.Schema({
+    title: String,
+    description: String,
+    userId: String,
+    createdAt: { type: Date, default: Date.now}
+})
+
+const Task = mongoose.model("Task", TaskSchema);
+
+app.get('/tasks', async (req: Request, res: Response) => {
+    try {
+        const tasks = await Task.find();
+        res.json(tasks);
+    } catch (error) {
+        console.error("Error fetching tasks", error);
+    }
+})
+
+app.post('/tasks', async (req: Request, res: Response) => {
+    const { title, description, userId } = req.body;
+    try {
+        const task = new Task({title, description, userId});
+        await task.save();
+        res.status(201).json(task);
+    } catch (error) {
+        console.error("Error creating task ", error);
+        res.status(500).json({error: "Internal server Error"}) 
+    }
+})
+
+app.get('/', (req: Request, res: Response) => {
+    res.send('hello world');
+})
+
+app.listen(port, () =>{
+    console.log("Task service listening on port " + port )
+})

@@ -1,51 +1,31 @@
-import express, { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import bodyParser from 'body-parser';
-
-const app = express();
-
-app.use(bodyParser.json());
-const port = 3002;
-
-mongoose.connect('mongodb://mongo:27017/users').then(() => { 
-    console.log("Connected to Mongodb")
-}).catch((err) => {
-    console.error("Error connecting to mongodb", err)
-})
+import amqp from 'amqplib';
 
 
-const UserSchema = new mongoose.Schema({
-    name: String,
-    email: String
-})
+let channel: any;
+let connection: any;
 
-const User = mongoose.model("User", UserSchema);
+async function start(retries=25, delay=5000){
+    while(retries > 0){
+        try {
+            console.log("Connecting to RabbitMQ...");
+            connection = await amqp.connect('amqp://guest:guest@rabbitmq:5672')
+            channel = await connection.createChannel();
+            await channel.assertQueue("task_created");
+            channel.consume("task_created", (msg: any) =>{
+                const taskData = JSON.parse(msg.content.toString())
+                console.log("Task created:", taskData.title );
+                channel.ack(msg)
+            }) 
+            
+        } catch (error) {
+            console.error("Error connecting to RabbitMQ", error);
+            retries--;
+            console.error("Retrying left:", retries, "attempts left");
+            await new Promise(res => setTimeout(res, delay));
+        }
 
-app.get('/users', async (req: Request, res: Response) => {
-    try {
-        const users = await User.find();
-        res.json(users);
-    } catch (error) {
-        console.error("Error fetching users", error);
     }
-})
 
-app.post('/users', async (req: Request, res: Response) => {
-    const { name, email } = req.body;
-    try {
-        const user = new User({name, email});
-        await user.save();
-        res.status(201).json(user);
-    } catch (error) {
-        console.error("Error creating user", error);
-        res.status(500).json({error: "Internal server Error"}) 
-    }
-})
+}
 
-app.get('/', (req: Request, res: Response) => {
-    res.send('hello world');
-})
-
-app.listen(3000, () =>{
-    console.log("Example" + port )
-})
+start()
